@@ -15,14 +15,18 @@ api.interceptors.request.use(config => {
   return config;
 });
 
-// Redirect to login on 401
+// Redirect to home (hash router) on 401 — but ONLY for protected routes,
+// not for /auth/login or /auth/register which legitimately return 401/400
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response && err.response.status === 401) {
+    const url = err.config?.url || '';
+    const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/me');
+    if (err.response && err.response.status === 401 && !isAuthEndpoint) {
       localStorage.removeItem('ppa_token');
       localStorage.removeItem('ppa_user');
-      window.location.href = '/login';
+      localStorage.removeItem('ppa_profile');
+      window.location.href = '/#/login';
     }
     return Promise.reject(err);
   }

@@ -23,9 +23,12 @@ const RegisterView = {
     const branches = ['CS', 'IS', 'EC', 'EE', 'ME', 'CE', 'AI/ML', 'Data Science', 'Other'];
     const industries = ['Information Technology', 'Finance', 'Manufacturing', 'Healthcare', 'E-Commerce', 'Consulting', 'Other'];
 
+    // Computed proxy so v-model always points to the active role's form
+    const currentForm = Vue.computed(() => role.value === 'student' ? studentForm : companyForm);
+
     const onSubmit = async () => {
       error.value = '';
-      const form = role.value === 'student' ? studentForm : companyForm;
+      const form = currentForm.value;
 
       if (form.password !== form.confirmPassword) {
         error.value = 'Passwords do not match'; return;
@@ -53,15 +56,17 @@ const RegisterView = {
       }
     };
 
-    return { role, error, loading, studentForm, companyForm, onSubmit, branches, industries };
+    return { role, error, loading, currentForm, studentForm, companyForm, onSubmit, branches, industries };
   },
   template: `
-    <div class="auth-wrapper" style="align-items:flex-start;padding:2rem 1rem;">
-      <div class="auth-card" style="max-width:560px;">
+    <div style="min-height:100vh;background:var(--cream);display:flex;align-items:flex-start;justify-content:center;padding:2rem 1rem;">
+      <div class="auth-card" style="max-width:580px;">
         <div class="auth-logo">
-          <div class="logo-icon"><i class="bi bi-briefcase-fill"></i></div>
-          <h1>Create Account</h1>
-          <p>Join the Placement Portal</p>
+          <div style="width:52px;height:52px;background:linear-gradient(135deg,var(--orange),var(--orange-dark));border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 0.75rem;box-shadow:0 4px 16px rgba(232,130,74,0.35);">
+            <i class="bi bi-briefcase-fill" style="font-size:1.4rem;color:white;"></i>
+          </div>
+          <h1 style="font-family:'Outfit',sans-serif;font-weight:800;font-size:1.6rem;color:var(--text-main);">Create Account</h1>
+          <p style="color:var(--text-muted);">Join PlaceConnect today</p>
         </div>
 
         <!-- Role Selector -->
@@ -83,15 +88,15 @@ const RegisterView = {
           <div class="row g-3 mb-3">
             <div class="col-12">
               <label class="form-label">Email</label>
-              <input v-model="role==='student' ? studentForm.email : companyForm.email" type="email" class="form-control" placeholder="Email address" required>
+              <input v-model="currentForm.email" type="email" class="form-control" placeholder="Email address" required>
             </div>
             <div class="col-sm-6">
               <label class="form-label">Password</label>
-              <input v-model="role==='student' ? studentForm.password : companyForm.password" type="password" class="form-control" placeholder="Min. 6 chars" required>
+              <input v-model="currentForm.password" type="password" class="form-control" placeholder="Min. 6 chars" required>
             </div>
             <div class="col-sm-6">
               <label class="form-label">Confirm Password</label>
-              <input v-model="role==='student' ? studentForm.confirmPassword : companyForm.confirmPassword" type="password" class="form-control" placeholder="Repeat password" required>
+              <input v-model="currentForm.confirmPassword" type="password" class="form-control" placeholder="Repeat password" required>
             </div>
           </div>
 
@@ -184,11 +189,16 @@ const RegisterView = {
           </button>
         </form>
 
-        <hr class="my-3" style="border-color:var(--dark-border);">
+        <hr class="my-3" style="border-color:var(--surface-border);">
         <p class="text-center mb-0" style="color:var(--text-muted);font-size:0.9rem;">
           Already registered?&nbsp;
-          <router-link to="/login" class="text-primary-light fw-600">Sign in</router-link>
+          <router-link to="/login" style="color:var(--orange);font-weight:700;text-decoration:none;">Sign in</router-link>
         </p>
+        <div class="text-center mt-3">
+          <router-link to="/" style="font-size:0.8rem;color:var(--text-muted);text-decoration:none;">
+            <i class="bi bi-arrow-left me-1"></i>Back to Home
+          </router-link>
+        </div>
       </div>
     </div>
   `

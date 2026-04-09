@@ -1,7 +1,7 @@
 /* =====================================================================
-   router.js — Vue Router 4 configuration
+   router.js — Vue Router 4 configuration (hash history for stability)
    ===================================================================== */
-const { createRouter, createWebHistory } = VueRouter;
+const { createRouter, createWebHashHistory } = VueRouter;
 
 // Layout wrapper for authenticated pages (sidebar + navbar)
 const AppLayout = {
@@ -22,18 +22,15 @@ const AppLayout = {
       </div>
       <!-- Sidebar overlay on mobile -->
       <div v-if="sidebarOpen" class="position-fixed top-0 start-0 w-100 h-100 d-md-none"
-           style="z-index:99;background:rgba(0,0,0,0.5);" @click="sidebarOpen=false"></div>
+           style="z-index:150;background:rgba(28,25,23,0.55);" @click="sidebarOpen=false"></div>
     </div>
   `
 };
 
 const routes = [
-  { path: '/', redirect: () => {
-    if (!store.isAuthenticated) return '/login';
-    if (store.isAdmin)   return '/admin';
-    if (store.isCompany) return '/company';
-    return '/student';
-  }},
+  // Public landing page
+  { path: '/', component: LandingView, meta: { public: true, allowAuthenticated: true } },
+
   { path: '/login',    component: LoginView,    meta: { public: true } },
   { path: '/register', component: RegisterView, meta: { public: true } },
 
@@ -77,12 +74,12 @@ const routes = [
     ]
   },
 
-  // Catch-all
+  // Catch-all → landing
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ];
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes,
   scrollBehavior: () => ({ top: 0 })
 });
@@ -92,8 +89,11 @@ router.beforeEach((to, from, next) => {
   store.init(); // Ensure store is initialized
 
   if (to.meta.public) {
+    // Landing page: always allow. Login/register: redirect to dashboard if already logged in.
     if (store.isAuthenticated && !to.meta.allowAuthenticated) {
-      return next('/');
+      if (store.isAdmin)   return next('/admin');
+      if (store.isCompany) return next('/company');
+      return next('/student');
     }
     return next();
   }

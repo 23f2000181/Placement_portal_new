@@ -19,7 +19,8 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
-    CACHE_TYPE = 'RedisCache'
+    # Use SimpleCache by default so the app runs without Redis in dev
+    CACHE_TYPE = os.environ.get('CACHE_TYPE', 'SimpleCache')
     CACHE_REDIS_URL = REDIS_URL
     CACHE_DEFAULT_TIMEOUT = 300  # 5 minutes
 

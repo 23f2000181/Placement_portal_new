@@ -5,12 +5,17 @@ from .extensions import db, jwt, mail, cache, cors
 
 
 def create_app(config_name='default'):
-    import os
     frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'frontend'))
     app = Flask(__name__, static_folder=frontend_dir, static_url_path='')
 
     # Load config
-    app.config.from_object(config[config_name])
+    conf_obj = config.get(config_name, config['default'])
+    app.config.from_object(conf_obj)
+    
+    # Ensure all uppercase attributes from the config object are in app.config
+    for key in dir(conf_obj):
+        if key.isupper():
+            app.config[key] = getattr(conf_obj, key)
 
     # Initialize extensions
     db.init_app(app)
@@ -56,8 +61,14 @@ def _seed_admin(app):
     from .models.user import User
     from .extensions import db as _db
 
-    admin_email = app.config['ADMIN_EMAIL']
-    if not User.query.filter_by(email=admin_email).first():
+    admin_email = app.config.get('ADMIN_EMAIL')
+    if not admin_email:
+        print('[PPA] ADMIN_EMAIL not configured, skipping admin seed.')
+        return
+
+    # Check if admin already exists
+    admin_user = User.query.filter_by(email=admin_email).first()
+    if not admin_user:
         admin = User(
             email=admin_email,
             role='admin',

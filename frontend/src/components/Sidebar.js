@@ -10,24 +10,24 @@ const SidebarComponent = {
     const route  = VueRouter.useRoute();
 
     const adminLinks = [
-      { to: '/admin', icon: 'bi-speedometer2', label: 'Dashboard' },
-      { to: '/admin/companies', icon: 'bi-building', label: 'Companies' },
-      { to: '/admin/students', icon: 'bi-people', label: 'Students' },
-      { to: '/admin/drives', icon: 'bi-briefcase', label: 'Placement Drives' },
-      { to: '/admin/applications', icon: 'bi-file-earmark-text', label: 'Applications' },
-      { to: '/admin/reports', icon: 'bi-bar-chart-line', label: 'Reports' }
+      { to: '/admin',              icon: 'bi-speedometer2',        label: 'Dashboard' },
+      { to: '/admin/companies',    icon: 'bi-building',            label: 'Companies' },
+      { to: '/admin/students',     icon: 'bi-people',              label: 'Students' },
+      { to: '/admin/drives',       icon: 'bi-briefcase',           label: 'Placement Drives' },
+      { to: '/admin/applications', icon: 'bi-file-earmark-text',   label: 'Applications' },
+      { to: '/admin/reports',      icon: 'bi-bar-chart-line',      label: 'Reports' }
     ];
     const companyLinks = [
-      { to: '/company', icon: 'bi-speedometer2', label: 'Dashboard' },
-      { to: '/company/drives', icon: 'bi-briefcase-fill', label: 'My Drives' },
-      { to: '/company/profile', icon: 'bi-building-gear', label: 'Company Profile' }
+      { to: '/company',         icon: 'bi-speedometer2',      label: 'Dashboard' },
+      { to: '/company/drives',  icon: 'bi-briefcase-fill',    label: 'My Drives' },
+      { to: '/company/profile', icon: 'bi-building-gear',     label: 'Company Profile' }
     ];
     const studentLinks = [
-      { to: '/student', icon: 'bi-speedometer2', label: 'Dashboard' },
-      { to: '/student/drives', icon: 'bi-briefcase', label: 'Browse Drives' },
-      { to: '/student/applications', icon: 'bi-file-earmark-check', label: 'My Applications' },
-      { to: '/student/history', icon: 'bi-trophy', label: 'Placement History' },
-      { to: '/student/profile', icon: 'bi-person-circle', label: 'Profile' }
+      { to: '/student',              icon: 'bi-speedometer2',          label: 'Dashboard' },
+      { to: '/student/drives',       icon: 'bi-briefcase',             label: 'Browse Drives' },
+      { to: '/student/applications', icon: 'bi-file-earmark-check',    label: 'My Applications' },
+      { to: '/student/history',      icon: 'bi-trophy',                label: 'Placement History' },
+      { to: '/student/profile',      icon: 'bi-person-circle',         label: 'Profile' }
     ];
 
     const links = Vue.computed(() => {
@@ -61,21 +61,41 @@ const SidebarComponent = {
       return store.profile?.full_name || 'Student';
     };
 
-    return { links, isActive, logout, store, getRoleIcon, getRoleLabel };
+    const getRoleTag = () => {
+      if (store.isAdmin)   return 'Admin';
+      if (store.isCompany) return 'Company';
+      return 'Student';
+    };
+
+    const getInitials = () => {
+      const label = getRoleLabel();
+      return label.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+    };
+
+    return { links, isActive, logout, store, getRoleIcon, getRoleLabel, getRoleTag, getInitials };
   },
   template: `
     <nav class="sidebar" :class="{ open }">
+
+      <!-- Header -->
       <div class="sidebar-header">
-        <router-link to="/" class="sidebar-logo d-flex align-items-center gap-2">
-          <i class="bi bi-briefcase-fill"></i>
-          Placement<span>Portal</span>
+        <router-link to="/" class="sidebar-logo" @click="$emit('close')">
+          <div class="logo-badge">
+            <i class="bi bi-briefcase-fill"></i>
+          </div>
+          <div class="logo-text">Place<span>Connect</span></div>
         </router-link>
-        <div class="mt-2 d-flex align-items-center gap-2">
-          <i :class="['bi', getRoleIcon()]" style="font-size:1rem;color:rgba(255,255,255,0.7)"></i>
-          <span style="font-size:0.8rem;color:rgba(255,255,255,0.8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ getRoleLabel() }}</span>
+
+        <div class="sidebar-user-info mt-3">
+          <div class="sidebar-avatar">{{ getInitials() }}</div>
+          <div style="overflow:hidden;">
+            <div class="sidebar-user-name">{{ getRoleLabel() }}</div>
+            <div class="sidebar-user-role">{{ getRoleTag() }}</div>
+          </div>
         </div>
       </div>
 
+      <!-- Nav Links -->
       <div class="sidebar-nav">
         <div class="nav-section-title">Navigation</div>
         <router-link
@@ -91,14 +111,14 @@ const SidebarComponent = {
         </router-link>
       </div>
 
+      <!-- Footer -->
       <div class="sidebar-footer">
-        <div class="mb-2" style="font-size:0.8rem;color:var(--text-muted);">
-          {{ store.user?.email }}
-        </div>
-        <button class="btn btn-sm btn-outline-danger w-100" @click="logout">
-          <i class="bi bi-box-arrow-right me-1"></i> Logout
+        <div class="sidebar-email">{{ store.user?.email }}</div>
+        <button class="btn btn-sm w-100" @click="logout" style="background:rgba(220,38,38,0.1);color:#f87171;border:1px solid rgba(220,38,38,0.25);border-radius:8px;font-family:'Outfit',sans-serif;font-weight:600;">
+          <i class="bi bi-box-arrow-right me-2"></i>Logout
         </button>
       </div>
+
     </nav>
   `
 };
