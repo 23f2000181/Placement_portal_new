@@ -1,7 +1,7 @@
 """Company routes: /api/company/*"""
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import get_jwt_identity
 
 from ..extensions import db, cache
 from ..models.user import User
@@ -23,7 +23,6 @@ def _get_company_profile():
 # ── Profile ────────────────────────────────────────────────────────────────────
 
 @company_bp.route('/profile', methods=['GET'])
-@jwt_required()
 @company_required
 def get_profile():
     company, err, code = _get_company_profile()
@@ -33,7 +32,6 @@ def get_profile():
 
 
 @company_bp.route('/profile', methods=['PUT'])
-@jwt_required()
 @company_required
 def update_profile():
     company, err, code = _get_company_profile()
@@ -54,7 +52,6 @@ def update_profile():
 # ── Dashboard ──────────────────────────────────────────────────────────────────
 
 @company_bp.route('/dashboard', methods=['GET'])
-@jwt_required()
 @company_required
 def dashboard():
     company, err, code = _get_company_profile()
@@ -84,7 +81,6 @@ def dashboard():
 # ── Drives ─────────────────────────────────────────────────────────────────────
 
 @company_bp.route('/drives', methods=['GET'])
-@jwt_required()
 @company_required
 def list_drives():
     company, err, code = _get_company_profile()
@@ -96,7 +92,6 @@ def list_drives():
 
 
 @company_bp.route('/drives', methods=['POST'])
-@jwt_required()
 @company_required
 def create_drive():
     company, err, code = _get_company_profile()
@@ -153,7 +148,6 @@ def create_drive():
 
 
 @company_bp.route('/drives/<int:drive_id>', methods=['PUT'])
-@jwt_required()
 @company_required
 def update_drive(drive_id):
     company, err, code = _get_company_profile()
@@ -187,7 +181,6 @@ def update_drive(drive_id):
 
 
 @company_bp.route('/drives/<int:drive_id>', methods=['DELETE'])
-@jwt_required()
 @company_required
 def delete_drive(drive_id):
     company, err, code = _get_company_profile()
@@ -202,7 +195,6 @@ def delete_drive(drive_id):
 
 
 @company_bp.route('/drives/<int:drive_id>/close', methods=['PUT'])
-@jwt_required()
 @company_required
 def close_drive(drive_id):
     company, err, code = _get_company_profile()
@@ -218,7 +210,6 @@ def close_drive(drive_id):
 # ── Applications ───────────────────────────────────────────────────────────────
 
 @company_bp.route('/drives/<int:drive_id>/applications', methods=['GET'])
-@jwt_required()
 @company_required
 def drive_applications(drive_id):
     company, err, code = _get_company_profile()
@@ -240,7 +231,6 @@ def drive_applications(drive_id):
 
 
 @company_bp.route('/applications/<int:app_id>/status', methods=['PUT'])
-@jwt_required()
 @company_required
 def update_application_status(app_id):
     company, err, code = _get_company_profile()
@@ -267,3 +257,84 @@ def update_application_status(app_id):
     db.session.commit()
     cache.delete('admin:dashboard:stats')
     return jsonify({'message': 'Application status updated', 'application': app.to_dict(include_student=True)}), 200
+
+
+# ── Company CSV Export ──────────────────────────────────────────────────────
+
+@company_bp.route('/drives/<int:drive_id>/export', methods=['POST'])
+@company_required
+def trigger_drive_export(drive_id):
+    """Start async CSV export of applicants for a drive."""
+    import csv
+    import io
+    import os
+    from flask import send_file
+
+    company, err, code = _get_company_profile()
+    if err:
+        return err, code
+
+    drive = PlacementDrive.query.filter_by(id=drive_id, company_id=company.id).first_or_404()
+
+    try:
+        from ..tasks.exports import export_drive_applicants_csv
+        task = export_drive_applicants_csv.delay(drive_id, company.id)
+        return jsonify({'message': 'Export started', 'task_id': task.id}), 202
+    except Exception:
+        # Sync fallback
+        apps = drive.applications.all()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Application ID', 'Student Name', 'USN', 'Branch', 'CGPA', 'Email',
+                         'Phone', 'Status', 'Applied Date', 'Interview Date', 'Notes'])
+        for a in apps:
+            s = a.student
+            writer.writerow([
+                a.id, s.full_name if s else '', s.usn if s else '',
+                s.branch if s else '', s.cgpa if s else '',
+                s.user.email if s and s.user else '',
+                s.phone if s else '',
+                a.status,
+                a.applied_at.strftime('%Y-%m-%d') if a.applied_at else '',
+                a.interview_date.strftime('%Y-%m-%d') if a.interview_date else '',
+                a.company_notes or ''
+            ])
+        output.seek(0)
+        safe_title = ''.join(c for c in drive.job_title if c.isalnum() or c in ' _-').strip()[:30]
+        return send_file(
+            io.BytesIO(output.getvalue().encode()),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'applicants_{safe_title}.csv'
+        )
+
+
+@company_bp.route('/export/status/<task_id>', methods=['GET'])
+@company_required
+def company_export_status(task_id):
+    try:
+        from ..tasks.exports import export_drive_applicants_csv
+        from celery.result import AsyncResult
+        result = AsyncResult(task_id, app=export_drive_applicants_csv.app)
+        return jsonify({
+            'task_id': task_id,
+            'status': result.state,
+            'ready': result.ready(),
+            'result': result.result if result.ready() and not result.failed() else None
+        }), 200
+    except Exception:
+        return jsonify({'status': 'UNKNOWN', 'ready': False}), 200
+
+
+@company_bp.route('/export/download/<task_id>', methods=['GET'])
+@company_required
+def company_download_export(task_id):
+    import os
+    from flask import send_file, current_app
+    company, err, code = _get_company_profile()
+    if err:
+        return err, code
+    export_path = os.path.join(current_app.config['EXPORT_FOLDER'], f'drive_export_{task_id}_{company.id}.csv')
+    if not os.path.exists(export_path):
+        return jsonify({'error': 'Export file not found or not ready'}), 404
+    return send_file(export_path, as_attachment=True, download_name=f'applicants_{company.id}.csv')

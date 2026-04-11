@@ -37,10 +37,20 @@ const AdminStudents = {
       if (selected.value?.id === id) modal.hide();
     };
 
+    const deleteStudent = async (s) => {
+      if (!confirm(`Permanently delete "${s.full_name || s.usn}" and ALL their data? This cannot be undone.`)) return;
+      try {
+        await Admin.deleteStudent(s.id);
+        showToast('Student permanently deleted', 'danger');
+        modal.hide();
+        load();
+      } catch (e) { showToast(e.response?.data?.error || 'Delete failed', 'danger'); }
+    };
+
     let timer;
     const onSearch = () => { clearTimeout(timer); timer = setTimeout(load, 350); };
 
-    return { students, loading, search, branch, year, selected, openModal, toggleBlacklist, onSearch, load, formatDate };
+    return { students, loading, search, branch, year, selected, openModal, toggleBlacklist, deleteStudent, onSearch, load, formatDate };
   },
   template: `
     <div>
@@ -91,9 +101,12 @@ const AdminStudents = {
                   <td>
                     <div class="d-flex gap-1">
                       <button class="btn btn-sm btn-outline-light" @click="openModal(s)"><i class="bi bi-eye"></i></button>
-                      <button :class="['btn btn-sm', s.is_blacklisted ? 'btn-outline-success' : 'btn-outline-danger']"
-                              @click="toggleBlacklist(s.id, s.is_blacklisted)">
+                      <button :class="['btn btn-sm', s.is_blacklisted ? 'btn-outline-success' : 'btn-outline-warning']"
+                              @click="toggleBlacklist(s.id, s.is_blacklisted)" :title="s.is_blacklisted ? 'Un-blacklist' : 'Blacklist'">
                         <i :class="['bi', s.is_blacklisted ? 'bi-unlock' : 'bi-slash-circle']"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger" @click="deleteStudent(s)" title="Permanently delete">
+                        <i class="bi bi-trash"></i>
                       </button>
                     </div>
                   </td>
@@ -136,10 +149,13 @@ const AdminStudents = {
               </div>
             </div>
             <div class="modal-footer">
-              <button :class="['btn', selected.is_blacklisted ? 'btn-outline-success' : 'btn-danger']"
+              <button :class="['btn', selected.is_blacklisted ? 'btn-outline-success' : 'btn-warning']"
                       @click="toggleBlacklist(selected.id, selected.is_blacklisted)">
                 <i :class="['bi me-1', selected.is_blacklisted ? 'bi-unlock' : 'bi-slash-circle']"></i>
                 {{ selected.is_blacklisted ? 'Un-blacklist' : 'Blacklist' }}
+              </button>
+              <button class="btn btn-danger" @click="deleteStudent(selected)">
+                <i class="bi bi-trash me-1"></i> Delete Permanently
               </button>
               <button class="btn btn-outline-light" data-bs-dismiss="modal">Close</button>
             </div>

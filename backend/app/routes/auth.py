@@ -88,7 +88,7 @@ def register():
         db.session.add(profile)
 
     db.session.commit()
-    token = create_access_token(identity=user.id)
+    token = create_access_token(identity=str(user.id))
     return jsonify({
         'message': 'Registration successful',
         'access_token': token,
@@ -115,7 +115,7 @@ def login():
     if not user.is_active:
         return jsonify({'error': 'Your account is deactivated. Contact admin.'}), 403
 
-    token = create_access_token(identity=user.id)
+    token = create_access_token(identity=str(user.id))
     profile = None
     if user.role == 'company' and user.company_profile:
         profile = user.company_profile.to_dict()

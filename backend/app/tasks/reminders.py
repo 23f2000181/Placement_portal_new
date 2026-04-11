@@ -1,4 +1,4 @@
-"""Daily deadline reminder task."""
+"""Daily deadline reminder and interview reminder tasks."""
 from datetime import datetime, timezone, timedelta
 from celery import shared_task
 from flask_mail import Message
@@ -75,4 +75,67 @@ def send_deadline_reminders():
                     print(f'[Reminder] Failed to send to {user.email}: {e}')
 
         print(f'[Reminder] Sent {sent_count} deadline reminders')
+        return {'sent': sent_count}
+
+
+@shared_task(name='app.tasks.reminders.send_interview_reminders')
+def send_interview_reminders():
+    """Send email reminders to students with scheduled interviews in the next 24 hours."""
+    from app import create_app
+    from app.extensions import mail
+    from app.models.application import Application
+    from app.models.student import StudentProfile
+    from app.models.user import User
+
+    app = create_app()
+    with app.app_context():
+        now = datetime.now(timezone.utc)
+        tomorrow = now + timedelta(hours=24)
+
+        # Applications that have an interview scheduled within the next 24 hours
+        upcoming_interviews = Application.query.filter(
+            Application.interview_date >= now,
+            Application.interview_date <= tomorrow,
+            Application.status.in_(['shortlisted', 'applied'])
+        ).all()
+
+        sent_count = 0
+        for app_rec in upcoming_interviews:
+            student = StudentProfile.query.get(app_rec.student_id)
+            if not student:
+                continue
+
+            user = User.query.get(student.user_id)
+            if not user or user.is_blacklisted or not user.is_active:
+                continue
+
+            drive = app_rec.drive
+            if not drive:
+                continue
+
+            interview_str = app_rec.interview_date.strftime('%d %B %Y at %I:%M %p UTC')
+            company_name = drive.company.company_name if drive.company else 'the company'
+
+            try:
+                msg = Message(
+                    subject=f'[Placement Portal] Interview Reminder: {drive.job_title} at {company_name}',
+                    recipients=[user.email],
+                    html=f"""
+                    <h2>\U0001F4CB Interview Reminder</h2>
+                    <p>Hi {student.full_name},</p>
+                    <p>This is a reminder that you have a scheduled interview for
+                    <strong>{drive.job_title}</strong> at <strong>{company_name}</strong>.</p>
+                    <p><strong>Interview Date &amp; Time:</strong> {interview_str}</p>
+                    <p><strong>Interview Mode:</strong> {drive.interview_mode}</p>
+                    {f'<p><strong>Rounds:</strong> {drive.rounds}</p>' if drive.rounds else ''}
+                    <p>Log in to the Placement Portal for more details. Good luck!</p>
+                    <br><p>Best regards,<br>Placement Cell</p>
+                    """
+                )
+                mail.send(msg)
+                sent_count += 1
+            except Exception as e:
+                print(f'[Interview Reminder] Failed to send to {user.email}: {e}')
+
+        print(f'[Interview Reminder] Sent {sent_count} interview reminders')
         return {'sent': sent_count}

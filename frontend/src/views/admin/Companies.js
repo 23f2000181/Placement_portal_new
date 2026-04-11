@@ -8,6 +8,7 @@ const AdminCompanies = {
     const loading   = Vue.ref(true);
     const search    = Vue.ref('');
     const status    = Vue.ref('');
+    const industry  = Vue.ref('');
     const selected  = Vue.ref(null);
     const rejectReason = Vue.ref('');
     const actionLoading = Vue.ref(false);
@@ -16,7 +17,7 @@ const AdminCompanies = {
     const load = async () => {
       loading.value = true;
       try {
-        const res = await Admin.companies({ q: search.value, status: status.value });
+        const res = await Admin.companies({ q: search.value, status: status.value, industry: industry.value });
         companies.value = res.data.companies;
       } catch (e) {
         showToast('Failed to load companies', 'danger');
@@ -28,7 +29,7 @@ const AdminCompanies = {
       modal = new bootstrap.Modal(document.getElementById('companyModal'));
     });
 
-    const openModal = (c) => { selected.value = c; rejectReason.value = ''; modal.show(); };
+    const openModal = (c) => { selected.value = c; rejectReason.value = c.rejection_reason || ''; modal.show(); };
 
     const approve = async (id) => {
       actionLoading.value = true;
@@ -60,11 +61,21 @@ const AdminCompanies = {
       } catch (e) { showToast('Error', 'danger'); }
     };
 
+    const deleteCompany = async (c) => {
+      if (!confirm(`Permanently delete "${c.company_name}" and ALL their data? This cannot be undone.`)) return;
+      try {
+        await Admin.deleteCompany(c.id);
+        showToast('Company permanently deleted', 'danger');
+        modal.hide();
+        load();
+      } catch (e) { showToast(e.response?.data?.error || 'Delete failed', 'danger'); }
+    };
+
     let searchTimer;
     const onSearch = () => { clearTimeout(searchTimer); searchTimer = setTimeout(load, 350); };
 
-    return { companies, loading, search, status, selected, rejectReason, actionLoading,
-             openModal, approve, reject, blacklist, onSearch, load, formatDate };
+    return { companies, loading, search, status, industry, selected, rejectReason, actionLoading,
+             openModal, approve, reject, blacklist, deleteCompany, onSearch, load, formatDate };
   },
   template: `
     <div>
@@ -76,11 +87,14 @@ const AdminCompanies = {
       <div class="card mb-4">
         <div class="card-body py-3">
           <div class="row g-2">
-            <div class="col-md-6">
+            <div class="col-md-5">
               <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-search"></i></span>
                 <input v-model="search" @input="onSearch" class="form-control" placeholder="Search companies...">
               </div>
+            </div>
+            <div class="col-md-3">
+              <input v-model="industry" @input="onSearch" class="form-control" placeholder="Filter by industry">
             </div>
             <div class="col-md-3">
               <select v-model="status" @change="load" class="form-select">
@@ -126,11 +140,14 @@ const AdminCompanies = {
                       <button class="btn btn-sm btn-outline-light" @click="openModal(c)" :id="'view-company-' + c.id">
                         <i class="bi bi-eye"></i>
                       </button>
-                      <button v-if="c.is_blacklisted" class="btn btn-sm btn-outline-success" @click="blacklist(c.id, 'unblacklist')">
+                      <button v-if="c.is_blacklisted" class="btn btn-sm btn-outline-success" @click="blacklist(c.id, 'unblacklist')" title="Un-blacklist">
                         <i class="bi bi-unlock"></i>
                       </button>
-                      <button v-else class="btn btn-sm btn-outline-danger" @click="blacklist(c.id, 'blacklist')">
+                      <button v-else class="btn btn-sm btn-outline-warning" @click="blacklist(c.id, 'blacklist')" title="Blacklist">
                         <i class="bi bi-slash-circle"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger" @click="deleteCompany(c)" title="Permanently delete">
+                        <i class="bi bi-trash"></i>
                       </button>
                     </div>
                   </td>
@@ -159,6 +176,8 @@ const AdminCompanies = {
                     <tr><td class="text-muted-custom">Website</td><td><a :href="selected.website" target="_blank">{{ selected.website || '—' }}</a></td></tr>
                     <tr><td class="text-muted-custom">Industry</td><td>{{ selected.industry || '—' }}</td></tr>
                     <tr><td class="text-muted-custom">HQ</td><td>{{ selected.headquarters || '—' }}</td></tr>
+                    <tr><td class="text-muted-custom">Drives</td><td>{{ selected.total_drives }}</td></tr>
+                    <tr><td class="text-muted-custom">Registered</td><td>{{ formatDate(selected.created_at) }}</td></tr>
                   </table>
                 </div>
                 <div class="col-md-6">
@@ -166,13 +185,9 @@ const AdminCompanies = {
                   <p class="small">{{ selected.description || 'No description provided.' }}</p>
                 </div>
               </div>
-              <div v-if="selected.approval_status === 'rejected' || selected.rejection_reason" class="mt-3">
-                <label class="form-label">Rejection Reason (editable)</label>
+              <div v-if="selected.approval_status !== 'approved'" class="mt-3">
+                <label class="form-label">Rejection Reason {{ selected.approval_status === 'rejected' ? '(current)' : '(if rejecting)' }}</label>
                 <textarea v-model="rejectReason" class="form-control" rows="2" placeholder="Provide a reason..."></textarea>
-              </div>
-              <div v-else-if="selected.approval_status !== 'approved'" class="mt-3">
-                <label class="form-label">Rejection Reason (if rejecting)</label>
-                <textarea v-model="rejectReason" class="form-control" rows="2"></textarea>
               </div>
             </div>
             <div class="modal-footer gap-2">
@@ -180,8 +195,11 @@ const AdminCompanies = {
                 <span v-if="actionLoading" class="spinner-border spinner-border-sm me-1"></span>
                 <i v-else class="bi bi-check-circle me-1"></i> Approve
               </button>
-              <button v-if="selected.approval_status !== 'rejected'" class="btn btn-danger" @click="reject(selected.id)" :disabled="actionLoading">
+              <button v-if="selected.approval_status !== 'rejected'" class="btn btn-warning" @click="reject(selected.id)" :disabled="actionLoading">
                 <i class="bi bi-x-circle me-1"></i> Reject
+              </button>
+              <button class="btn btn-danger" @click="deleteCompany(selected)">
+                <i class="bi bi-trash me-1"></i> Delete Permanently
               </button>
               <button class="btn btn-outline-light" data-bs-dismiss="modal">Close</button>
             </div>

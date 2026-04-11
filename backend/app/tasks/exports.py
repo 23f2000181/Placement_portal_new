@@ -65,3 +65,63 @@ def export_applications_csv(self, student_id):
             'total_records': total,
             'task_id': self.request.id
         }
+
+
+@shared_task(name='app.tasks.exports.export_drive_applicants_csv', bind=True)
+def export_drive_applicants_csv(self, drive_id, company_id):
+    """Async task: export all applicants for a drive to CSV (company side)."""
+    from app import create_app
+    from app.models.drive import PlacementDrive
+    from app.models.application import Application
+
+    app = create_app()
+    with app.app_context():
+        self.update_state(state='PROGRESS', meta={'current': 0, 'total': 100})
+
+        drive = PlacementDrive.query.get(drive_id)
+        if not drive or drive.company_id != company_id:
+            return {'error': 'Drive not found or access denied'}
+
+        apps = drive.applications.all()
+        total = len(apps)
+
+        export_dir = app.config['EXPORT_FOLDER']
+        os.makedirs(export_dir, exist_ok=True)
+        filename = f'drive_export_{self.request.id}_{company_id}.csv'
+        filepath = os.path.join(export_dir, filename)
+
+        with open(filepath, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                'Application ID', 'Student Name', 'USN', 'Branch',
+                'CGPA', 'Email', 'Phone', 'LinkedIn',
+                'Status', 'Applied Date', 'Interview Date', 'Company Notes'
+            ])
+            for idx, a in enumerate(apps):
+                s = a.student
+                writer.writerow([
+                    a.id,
+                    s.full_name if s else '',
+                    s.usn if s else '',
+                    s.branch if s else '',
+                    s.cgpa if s else '',
+                    s.user.email if s and s.user else '',
+                    s.phone if s else '',
+                    s.linkedin if s else '',
+                    a.status,
+                    a.applied_at.strftime('%Y-%m-%d %H:%M') if a.applied_at else '',
+                    a.interview_date.strftime('%Y-%m-%d') if a.interview_date else '',
+                    a.company_notes or ''
+                ])
+                self.update_state(
+                    state='PROGRESS',
+                    meta={'current': int((idx + 1) / max(total, 1) * 100), 'total': 100}
+                )
+
+        return {
+            'status': 'done',
+            'drive_id': drive_id,
+            'filename': filename,
+            'total_records': total,
+            'task_id': self.request.id
+        }

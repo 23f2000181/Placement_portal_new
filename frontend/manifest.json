@@ -1,8 +1,21 @@
 {
-  "name": "Placement Portal",
-  "short_name": "Placement",
+  "name": "PlaceConnect — Campus Placement Portal",
+  "short_name": "PlaceConnect",
+  "description": "The modern campus placement management system connecting students with top companies.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0d6efd"
+  "orientation": "any",
+  "background_color": "#1C1917",
+  "theme_color": "#E8824A",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "lang": "en-IN"
 }

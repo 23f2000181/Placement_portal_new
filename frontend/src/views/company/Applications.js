@@ -52,7 +52,25 @@ const CompanyApplications = {
     };
 
     return { drive, apps, loading, statusFilter, selected, newStatus, interviewDate, notes,
-             openModal, updateStatus, load, formatDate, formatDateTime };
+             openModal, updateStatus, load, formatDate, formatDateTime,
+             exporting: Vue.ref(false),
+             exportDrive: async function() {
+               this.exporting = true;
+               const driveId = route.params.id;
+               try {
+                 const res = await Company.triggerExport(driveId);
+                 if (res.data.task_id) {
+                   showToast('Export started! It will download when ready.', 'info');
+                 }
+               } catch {
+                 // Sync fallback — open route directly
+                 const a = document.createElement('a');
+                 a.href = `/api/company/drives/${driveId}/export`;
+                 a.click();
+                 showToast('Export triggered!', 'success');
+               } finally { this.exporting = false; }
+             }
+           };
   },
   template: `
     <div>
@@ -75,8 +93,13 @@ const CompanyApplications = {
       </div></div>
 
       <div class="card">
-        <div class="card-header py-3 d-flex justify-content-between">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
           <span>{{ apps.length }} applicant(s)</span>
+          <button class="btn btn-sm btn-outline-light" @click="exportDrive" :disabled="exporting">
+            <span v-if="exporting" class="spinner-border spinner-border-sm me-1"></span>
+            <i v-else class="bi bi-download me-1"></i>
+            {{ exporting ? 'Exporting...' : 'Export CSV' }}
+          </button>
         </div>
         <div class="card-body p-0">
           <div v-if="loading" class="text-center py-5"><div class="spinner-border text-primary"></div></div>

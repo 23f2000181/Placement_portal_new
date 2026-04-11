@@ -4,7 +4,7 @@ import csv
 import io
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, send_file, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import get_jwt_identity
 from werkzeug.utils import secure_filename
 
 from ..extensions import db, cache
@@ -33,7 +33,6 @@ def _get_student_profile():
 # ── Profile ────────────────────────────────────────────────────────────────────
 
 @student_bp.route('/profile', methods=['GET'])
-@jwt_required()
 @student_required
 def get_profile():
     student, err, code = _get_student_profile()
@@ -43,7 +42,6 @@ def get_profile():
 
 
 @student_bp.route('/profile', methods=['PUT'])
-@jwt_required()
 @student_required
 def update_profile():
     student, err, code = _get_student_profile()
@@ -72,7 +70,6 @@ def update_profile():
 
 
 @student_bp.route('/profile/resume', methods=['POST'])
-@jwt_required()
 @student_required
 def upload_resume():
     student, err, code = _get_student_profile()
@@ -101,7 +98,6 @@ def upload_resume():
 
 
 @student_bp.route('/profile/resume', methods=['GET'])
-@jwt_required()
 @student_required
 def download_resume():
     student, err, code = _get_student_profile()
@@ -115,7 +111,6 @@ def download_resume():
 # ── Drives ─────────────────────────────────────────────────────────────────────
 
 @student_bp.route('/drives', methods=['GET'])
-@jwt_required()
 @student_required
 def list_drives():
     student, err, code = _get_student_profile()
@@ -201,7 +196,6 @@ def list_drives():
 
 
 @student_bp.route('/drives/<int:drive_id>', methods=['GET'])
-@jwt_required()
 @student_required
 def get_drive(drive_id):
     student, err, code = _get_student_profile()
@@ -218,7 +212,6 @@ def get_drive(drive_id):
 # ── Applications ───────────────────────────────────────────────────────────────
 
 @student_bp.route('/drives/<int:drive_id>/apply', methods=['POST'])
-@jwt_required()
 @student_required
 def apply(drive_id):
     student, err, code = _get_student_profile()
@@ -269,7 +262,6 @@ def apply(drive_id):
 
 
 @student_bp.route('/applications', methods=['GET'])
-@jwt_required()
 @student_required
 def my_applications():
     student, err, code = _get_student_profile()
@@ -282,7 +274,6 @@ def my_applications():
 # ── CSV Export (async via Celery) ──────────────────────────────────────────────
 
 @student_bp.route('/applications/export', methods=['POST'])
-@jwt_required()
 @student_required
 def trigger_export():
     student, err, code = _get_student_profile()
@@ -330,7 +321,6 @@ def _sync_export(student):
 
 
 @student_bp.route('/export/status/<task_id>', methods=['GET'])
-@jwt_required()
 @student_required
 def export_status(task_id):
     try:
@@ -348,7 +338,6 @@ def export_status(task_id):
 
 
 @student_bp.route('/export/download/<task_id>', methods=['GET'])
-@jwt_required()
 @student_required
 def download_export(task_id):
     student, err, code = _get_student_profile()
@@ -364,7 +353,6 @@ def download_export(task_id):
 # ── Placement history ──────────────────────────────────────────────────────────
 
 @student_bp.route('/history', methods=['GET'])
-@jwt_required()
 @student_required
 def placement_history():
     student, err, code = _get_student_profile()

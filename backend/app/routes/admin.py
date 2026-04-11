@@ -16,7 +16,6 @@ admin_bp = Blueprint('admin', __name__)
 
 
 @admin_bp.route('/dashboard', methods=['GET'])
-@jwt_required()
 @admin_required
 def dashboard():
     cached = cache.get('admin:dashboard:stats')
@@ -56,11 +55,11 @@ def dashboard():
 # ── Company management ─────────────────────────────────────────────────────────
 
 @admin_bp.route('/companies', methods=['GET'])
-@jwt_required()
 @admin_required
 def list_companies():
     status = request.args.get('status')
     search = request.args.get('q', '').strip()
+    industry = request.args.get('industry', '').strip()
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 20))
 
@@ -69,6 +68,8 @@ def list_companies():
         query = query.filter_by(approval_status=status)
     if search:
         query = query.filter(CompanyProfile.company_name.ilike(f'%{search}%'))
+    if industry:
+        query = query.filter(CompanyProfile.industry.ilike(f'%{industry}%'))
 
     pagination = query.order_by(CompanyProfile.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
     companies = [c.to_dict(include_user=True) for c in pagination.items]
@@ -82,7 +83,6 @@ def list_companies():
 
 
 @admin_bp.route('/companies/<int:company_id>', methods=['GET'])
-@jwt_required()
 @admin_required
 def get_company(company_id):
     company = CompanyProfile.query.get_or_404(company_id)
@@ -92,7 +92,6 @@ def get_company(company_id):
 
 
 @admin_bp.route('/companies/<int:company_id>/approve', methods=['PUT'])
-@jwt_required()
 @admin_required
 def approve_company(company_id):
     company = CompanyProfile.query.get_or_404(company_id)
@@ -105,7 +104,6 @@ def approve_company(company_id):
 
 
 @admin_bp.route('/companies/<int:company_id>/reject', methods=['PUT'])
-@jwt_required()
 @admin_required
 def reject_company(company_id):
     company = CompanyProfile.query.get_or_404(company_id)
@@ -118,7 +116,6 @@ def reject_company(company_id):
 
 
 @admin_bp.route('/companies/<int:company_id>/blacklist', methods=['PUT'])
-@jwt_required()
 @admin_required
 def blacklist_company(company_id):
     company = CompanyProfile.query.get_or_404(company_id)
@@ -132,10 +129,24 @@ def blacklist_company(company_id):
     return jsonify({'message': msg}), 200
 
 
+@admin_bp.route('/companies/<int:company_id>', methods=['DELETE'])
+@admin_required
+def delete_company(company_id):
+    """Permanently remove a company and their associated user account."""
+    company = CompanyProfile.query.get_or_404(company_id)
+    user = User.query.get(company.user_id)
+    db.session.delete(company)
+    if user:
+        db.session.delete(user)
+    db.session.commit()
+    cache.delete('admin:dashboard:stats')
+    cache.delete('drives:approved')
+    return jsonify({'message': 'Company and all associated data deleted'}), 200
+
+
 # ── Student management ─────────────────────────────────────────────────────────
 
 @admin_bp.route('/students', methods=['GET'])
-@jwt_required()
 @admin_required
 def list_students():
     search = request.args.get('q', '').strip()
@@ -167,7 +178,6 @@ def list_students():
 
 
 @admin_bp.route('/students/<int:student_id>', methods=['GET'])
-@jwt_required()
 @admin_required
 def get_student(student_id):
     student = StudentProfile.query.get_or_404(student_id)
@@ -177,7 +187,6 @@ def get_student(student_id):
 
 
 @admin_bp.route('/students/<int:student_id>/blacklist', methods=['PUT'])
-@jwt_required()
 @admin_required
 def blacklist_student(student_id):
     student = StudentProfile.query.get_or_404(student_id)
@@ -190,10 +199,23 @@ def blacklist_student(student_id):
     return jsonify({'message': msg}), 200
 
 
+@admin_bp.route('/students/<int:student_id>', methods=['DELETE'])
+@admin_required
+def delete_student(student_id):
+    """Permanently remove a student and their associated user account."""
+    student = StudentProfile.query.get_or_404(student_id)
+    user = User.query.get(student.user_id)
+    db.session.delete(student)
+    if user:
+        db.session.delete(user)
+    db.session.commit()
+    cache.delete('admin:dashboard:stats')
+    return jsonify({'message': 'Student and all associated data deleted'}), 200
+
+
 # ── Drive management ───────────────────────────────────────────────────────────
 
 @admin_bp.route('/drives', methods=['GET'])
-@jwt_required()
 @admin_required
 def list_drives():
     status = request.args.get('status')
@@ -219,7 +241,6 @@ def list_drives():
 
 
 @admin_bp.route('/drives/<int:drive_id>/approve', methods=['PUT'])
-@jwt_required()
 @admin_required
 def approve_drive(drive_id):
     drive = PlacementDrive.query.get_or_404(drive_id)
@@ -233,7 +254,6 @@ def approve_drive(drive_id):
 
 
 @admin_bp.route('/drives/<int:drive_id>/reject', methods=['PUT'])
-@jwt_required()
 @admin_required
 def reject_drive(drive_id):
     drive = PlacementDrive.query.get_or_404(drive_id)
@@ -248,7 +268,6 @@ def reject_drive(drive_id):
 # ── Applications (Admin view) ──────────────────────────────────────────────────
 
 @admin_bp.route('/applications', methods=['GET'])
-@jwt_required()
 @admin_required
 def list_applications():
     page = int(request.args.get('page', 1))
@@ -273,7 +292,6 @@ def list_applications():
 # ── Search ─────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/search', methods=['GET'])
-@jwt_required()
 @admin_required
 def search():
     q = request.args.get('q', '').strip()
@@ -308,7 +326,6 @@ def search():
 # ── Reports ────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/reports', methods=['GET'])
-@jwt_required()
 @admin_required
 def reports():
     from sqlalchemy import extract

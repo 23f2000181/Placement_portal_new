@@ -5,7 +5,12 @@ from ..models.user import User
 
 
 def roles_required(*roles):
-    """Decorator to restrict access to specific roles."""
+    """Decorator to restrict access to specific roles.
+    
+    NOTE: Do NOT stack this with @jwt_required(). This decorator
+    calls verify_jwt_in_request() internally. Stacking both in
+    Flask-JWT-Extended 4.6.0 causes a 422 Unprocessable Entity.
+    """
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):

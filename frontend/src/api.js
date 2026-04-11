@@ -47,9 +47,11 @@ const Admin = {
   approveCompany: (id) => api.put(`/admin/companies/${id}/approve`),
   rejectCompany: (id, reason) => api.put(`/admin/companies/${id}/reject`, { reason }),
   blacklistCompany: (id, action) => api.put(`/admin/companies/${id}/blacklist`, { action }),
+  deleteCompany: (id) => api.delete(`/admin/companies/${id}`),
   students: (params) => api.get('/admin/students', { params }),
   getStudent: (id) => api.get(`/admin/students/${id}`),
   blacklistStudent: (id, action) => api.put(`/admin/students/${id}/blacklist`, { action }),
+  deleteStudent: (id) => api.delete(`/admin/students/${id}`),
   drives: (params) => api.get('/admin/drives', { params }),
   approveDrive: (id) => api.put(`/admin/drives/${id}/approve`),
   rejectDrive: (id, reason) => api.put(`/admin/drives/${id}/reject`, { reason }),
@@ -69,7 +71,10 @@ const Company = {
   deleteDrive: (id) => api.delete(`/company/drives/${id}`),
   closeDrive: (id) => api.put(`/company/drives/${id}/close`),
   driveApplications: (id, params) => api.get(`/company/drives/${id}/applications`, { params }),
-  updateAppStatus: (appId, data) => api.put(`/company/applications/${appId}/status`, data)
+  updateAppStatus: (appId, data) => api.put(`/company/applications/${appId}/status`, data),
+  triggerExport: (driveId) => api.post(`/company/drives/${driveId}/export`),
+  exportStatus: (taskId) => api.get(`/company/export/status/${taskId}`),
+  downloadExport: (taskId) => api.get(`/company/export/download/${taskId}`, { responseType: 'blob' })
 };
 
 // ── Student ───────────────────────────────────────────────────────────
