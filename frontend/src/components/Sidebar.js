@@ -8,6 +8,8 @@ const SidebarComponent = {
   setup() {
     const router = VueRouter.useRouter();
     const route  = VueRouter.useRoute();
+    const showInstall = Vue.ref(false);
+    let deferredPrompt = null;
 
     const adminLinks = [
       { to: '/admin',              icon: 'bi-speedometer2',        label: 'Dashboard' },
@@ -72,7 +74,28 @@ const SidebarComponent = {
       return label.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
     };
 
-    return { links, isActive, logout, store, getRoleIcon, getRoleLabel, getRoleTag, getInitials };
+    // PWA install prompt
+    Vue.onMounted(() => {
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        showInstall.value = true;
+      });
+      window.addEventListener('appinstalled', () => {
+        showInstall.value = false;
+        deferredPrompt = null;
+      });
+    });
+
+    const installApp = async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') showInstall.value = false;
+      deferredPrompt = null;
+    };
+
+    return { links, isActive, logout, store, getRoleIcon, getRoleLabel, getRoleTag, getInitials, showInstall, installApp };
   },
   template: `
     <nav class="sidebar" :class="{ open }">
@@ -114,6 +137,11 @@ const SidebarComponent = {
       <!-- Footer -->
       <div class="sidebar-footer">
         <div class="sidebar-email">{{ store.user?.email }}</div>
+        <!-- PWA Install -->
+        <button v-if="showInstall" @click="installApp" class="btn btn-sm w-100 mb-2"
+          style="background:rgba(79,70,229,0.12);color:#818cf8;border:1px solid rgba(79,70,229,0.3);border-radius:8px;font-family:'Outfit',sans-serif;font-weight:600;">
+          <i class="bi bi-phone-fill me-2"></i>Add to Desktop
+        </button>
         <button class="btn btn-sm w-100" @click="logout" style="background:rgba(220,38,38,0.1);color:#f87171;border:1px solid rgba(220,38,38,0.25);border-radius:8px;font-family:'Outfit',sans-serif;font-weight:600;">
           <i class="bi bi-box-arrow-right me-2"></i>Logout
         </button>

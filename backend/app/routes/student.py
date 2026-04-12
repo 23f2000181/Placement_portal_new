@@ -147,6 +147,24 @@ def list_drives():
         drive_ids = cached
         drives = PlacementDrive.query.filter(PlacementDrive.id.in_(drive_ids)).all()
 
+    def _check_eligibility(d, s):
+        eligible = True
+        reasons = []
+        if d.min_cgpa and s.cgpa < d.min_cgpa:
+            eligible = False
+            reasons.append(f'CGPA {s.cgpa} < required {d.min_cgpa}')
+        if d.eligible_branches and d.eligible_branches.upper() != 'ALL':
+            allowed = [b.strip().upper() for b in d.eligible_branches.split(',')]
+            if s.branch.upper() not in allowed:
+                eligible = False
+                reasons.append(f'Branch {s.branch} not in allowed: {", ".join(allowed)}')
+        if d.eligible_years and d.eligible_years.upper() != 'ALL':
+            allowed_years = [int(y.strip()) for y in d.eligible_years.split(',') if y.strip().isdigit()]
+            if s.year not in allowed_years:
+                eligible = False
+                reasons.append(f'Year {s.year} not eligible')
+        return eligible, reasons
+
     # Annotate eligibility
     result = []
     applied_ids = {a.drive_id for a in student.applications.all()}
@@ -155,21 +173,7 @@ def list_drives():
         dd['already_applied'] = d.id in applied_ids
 
         # Eligibility check
-        eligible = True
-        reasons = []
-        if d.min_cgpa and student.cgpa < d.min_cgpa:
-            eligible = False
-            reasons.append(f'CGPA {student.cgpa} < required {d.min_cgpa}')
-        if d.eligible_branches and d.eligible_branches != 'ALL':
-            allowed = [b.strip() for b in d.eligible_branches.split(',')]
-            if student.branch not in allowed:
-                eligible = False
-                reasons.append(f'Branch {student.branch} not in allowed: {", ".join(allowed)}')
-        if d.eligible_years and d.eligible_years != 'ALL':
-            allowed_years = [int(y.strip()) for y in d.eligible_years.split(',') if y.strip().isdigit()]
-            if student.year not in allowed_years:
-                eligible = False
-                reasons.append(f'Year {student.year} not eligible')
+        eligible, reasons = _check_eligibility(d, student)
 
         dd['is_eligible'] = eligible
         dd['eligibility_reasons'] = reasons
@@ -206,6 +210,27 @@ def get_drive(drive_id):
     existing = Application.query.filter_by(student_id=student.id, drive_id=drive_id).first()
     dd['already_applied'] = bool(existing)
     dd['application'] = existing.to_dict() if existing else None
+    
+    # Ad-hoc duplicate of eligibility check for get_drive
+    eligible = True
+    reasons = []
+    if drive.min_cgpa and student.cgpa < drive.min_cgpa:
+        eligible = False
+        reasons.append(f'CGPA {student.cgpa} < required {drive.min_cgpa}')
+    if drive.eligible_branches and drive.eligible_branches.upper() != 'ALL':
+        allowed = [b.strip().upper() for b in drive.eligible_branches.split(',')]
+        if student.branch.upper() not in allowed:
+            eligible = False
+            reasons.append(f'Branch {student.branch} not in allowed: {", ".join(allowed)}')
+    if drive.eligible_years and drive.eligible_years.upper() != 'ALL':
+        allowed_years = [int(y.strip()) for y in drive.eligible_years.split(',') if y.strip().isdigit()]
+        if student.year not in allowed_years:
+            eligible = False
+            reasons.append(f'Year {student.year} not eligible')
+    
+    dd['is_eligible'] = eligible
+    dd['eligibility_reasons'] = reasons
+
     return jsonify(dd), 200
 
 
@@ -239,12 +264,12 @@ def apply(drive_id):
     if drive.min_cgpa and student.cgpa < drive.min_cgpa:
         return jsonify({'error': f'CGPA {student.cgpa} is below the required {drive.min_cgpa}'}), 400
 
-    if drive.eligible_branches and drive.eligible_branches != 'ALL':
-        allowed = [b.strip() for b in drive.eligible_branches.split(',')]
-        if student.branch not in allowed:
+    if drive.eligible_branches and drive.eligible_branches.upper() != 'ALL':
+        allowed = [b.strip().upper() for b in drive.eligible_branches.split(',')]
+        if student.branch.upper() not in allowed:
             return jsonify({'error': f'Your branch ({student.branch}) is not eligible for this drive'}), 400
 
-    if drive.eligible_years and drive.eligible_years != 'ALL':
+    if drive.eligible_years and drive.eligible_years.upper() != 'ALL':
         allowed_years = [int(y.strip()) for y in drive.eligible_years.split(',') if y.strip().isdigit()]
         if student.year not in allowed_years:
             return jsonify({'error': f'Your year ({student.year}) is not eligible for this drive'}), 400

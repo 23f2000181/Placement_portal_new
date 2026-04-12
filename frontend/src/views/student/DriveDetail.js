@@ -185,48 +185,86 @@ const StudentApplications = {
 
     const triggerExport = async () => {
       exporting.value = true;
-      exportProgress.value = 0;
+      exportProgress.value = 10;
       try {
-        const res = await Student.triggerExport();
-        if (res.data.task_id) {
-          exportTaskId.value = res.data.task_id;
-          pollExport();
-        } else {
-          // Fallback: download directly (sync export)
-          const blob = new Blob([res.data]);
+        // Always attempt the sync path first via fetch() so it works without Celery
+        const token = localStorage.getItem('ppa_token');
+        const res = await fetch('/api/student/applications/export', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          showToast(j.error || 'Export failed', 'danger');
+          return;
+        }
+
+        const contentType = res.headers.get('Content-Type') || '';
+        
+        if (contentType.includes('text/csv') || contentType.includes('octet-stream')) {
+          // Sync CSV returned directly — download it
+          exportProgress.value = 100;
+          const blob = await res.blob();
           const url = URL.createObjectURL(blob);
-          const a = document.createElement('a'); a.href = url;
-          a.download = 'applications.csv'; a.click();
-          exporting.value = false;
-          showToast('CSV downloaded!','success');
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'my_applications.csv';
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast('CSV downloaded!', 'success');
+        } else {
+          // Celery async task — poll for completion
+          const data = await res.json();
+          if (data.task_id) {
+            exportTaskId.value = data.task_id;
+            exportProgress.value = 30;
+            pollExport();
+          } else {
+            showToast('Export started', 'info');
+          }
         }
       } catch (e) {
-        // Try sync endpoint
-        const a = document.createElement('a');
-        a.href = '/api/student/applications/export';
-        a.click();
-        exporting.value = false;
-        showToast('Export triggered!','success');
+        showToast('Export failed: ' + (e.message || 'Unknown error'), 'danger');
+      } finally {
+        if (!exportTaskId.value) exporting.value = false;
       }
     };
 
     const pollExport = async () => {
       if (!exportTaskId.value) return;
+      const taskId = exportTaskId.value; // capture before clearing
       try {
-        const res = await Student.exportStatus(exportTaskId.value);
+        const res = await Student.exportStatus(taskId);
         if (res.data.ready) {
           exportProgress.value = 100;
+          showToast('Export ready! Downloading...', 'success');
+          // Fetch the file with auth headers (plain a.click() won't include JWT)
+          const token = localStorage.getItem('ppa_token');
+          const dlRes = await fetch(`/api/student/export/download/${taskId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (dlRes.ok) {
+            const blob = await dlRes.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'my_applications.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+          } else {
+            showToast('Download failed — try again', 'danger');
+          }
           exporting.value = false;
-          showToast('Export ready! Downloading...','success');
-          // Download
-          const a = document.createElement('a');
-          a.href = `/api/student/export/download/${exportTaskId.value}`;
-          a.click();
+          exportTaskId.value = null;
         } else {
-          exportProgress.value = res.data.result?.current || 50;
+          exportProgress.value = res.data.result?.current || 60;
           setTimeout(pollExport, 1500);
         }
-      } catch { exporting.value = false; }
+      } catch { exporting.value = false; exportTaskId.value = null; }
     };
 
     return { apps, loading, exporting, exportProgress, load, triggerExport, formatDate, formatDateTime };

@@ -53,8 +53,38 @@ const CompanyDrives = {
       showForm.value = true;
     };
 
+    const validateDriveForm = () => {
+      if (!form.job_title.trim())        return 'Job title is required.';
+      if (form.job_title.trim().length < 3) return 'Job title must be at least 3 characters.';
+      if (!form.job_description.trim())  return 'Job description is required.';
+      if (form.job_description.trim().length < 20) return 'Job description must be at least 20 characters.';
+      if (!form.application_deadline)    return 'Application deadline is required.';
+      const now = new Date();
+      const deadline = new Date(form.application_deadline);
+      if (isNaN(deadline.getTime()))     return 'Application deadline is not a valid date.';
+      if (deadline <= now)               return 'Application deadline must be a future date.';
+      if (form.drive_date) {
+        const dd = new Date(form.drive_date);
+        if (!isNaN(dd.getTime()) && dd <= deadline)
+          return 'Drive date must be after the application deadline.';
+      }
+      if (form.package_lpa !== '' && form.package_lpa !== null) {
+        const pkg = parseFloat(form.package_lpa);
+        if (isNaN(pkg) || pkg <= 0)      return 'Package must be a positive number.';
+        if (pkg > 500)                   return 'Package (LPA) value seems too high. Please verify.';
+      }
+      if (form.min_cgpa !== '' && form.min_cgpa !== null) {
+        const cgpa = parseFloat(form.min_cgpa);
+        if (isNaN(cgpa) || cgpa < 0 || cgpa > 10) return 'Minimum CGPA must be between 0 and 10.';
+      }
+      return null;
+    };
+
     const save = async () => {
       error.value = '';
+      const valErr = validateDriveForm();
+      if (valErr) { error.value = valErr; return; }
+
       saving.value = true;
       try {
         const payload = { ...form };

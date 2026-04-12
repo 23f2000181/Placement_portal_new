@@ -1,15 +1,16 @@
 /* =====================================================================
-   admin/Reports.js - Reports with charts
+   admin/Reports.js - Reports with charts + PDF download
    ===================================================================== */
 const AdminReports = {
   name: 'AdminReports',
   setup() {
-    const data    = Vue.ref(null);
-    const year    = Vue.ref(new Date().getFullYear());
-    const month   = Vue.ref('');
-    const loading = Vue.ref(true);
-    const barRef  = Vue.ref(null);
-    const pieRef  = Vue.ref(null);
+    const data      = Vue.ref(null);
+    const year      = Vue.ref(new Date().getFullYear());
+    const month     = Vue.ref('');
+    const loading   = Vue.ref(true);
+    const pdfLoading = Vue.ref(false);
+    const barRef    = Vue.ref(null);
+    const pieRef    = Vue.ref(null);
     let barChart = null, pieChart = null;
 
     const load = async () => {
@@ -17,13 +18,16 @@ const AdminReports = {
       try {
         const res = await Admin.reports({ year: year.value, month: month.value || undefined });
         data.value = res.data;
-        Vue.nextTick(renderCharts);
       } catch { showToast('Failed to load reports','danger'); }
-      finally { loading.value = false; }
+      finally { 
+        loading.value = false; 
+        Vue.nextTick(() => { setTimeout(renderCharts, 50); }); 
+      }
     };
 
     const renderCharts = () => {
       if (!data.value) return;
+      if (!barRef.value || !pieRef.value) return; // Prevent crashes if DOM is not ready
       if (barChart) barChart.destroy();
       if (pieChart) pieChart.destroy();
       const monthly = data.value.monthly_breakdown;
@@ -55,14 +59,46 @@ const AdminReports = {
       });
     };
 
+    const downloadPDF = async () => {
+      pdfLoading.value = true;
+      try {
+        const params = new URLSearchParams({ year: year.value });
+        if (month.value) params.append('month', month.value);
+        // Fetch PDF blob with JWT auth
+        const token = localStorage.getItem('ppa_token');
+        const res = await fetch(`/api/admin/reports/pdf?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          showToast(j.error || 'PDF generation failed', 'danger');
+          return;
+        }
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const label = month.value ? `${monthNames[month.value - 1]}_${year.value}` : year.value;
+        a.href = url;
+        a.download = `placement_report_${label}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('PDF downloaded!', 'success');
+      } catch (e) {
+        showToast('Failed to download PDF', 'danger');
+      } finally {
+        pdfLoading.value = false;
+      }
+    };
+
     Vue.onMounted(load);
 
-    return { data, year, month, loading, barRef, pieRef, load };
+    return { data, year, month, loading, pdfLoading, barRef, pieRef, load, downloadPDF };
   },
   template: `
     <div>
       <div class="page-header d-flex justify-content-between align-items-center">
-        <div><h2>Reports & Analytics</h2><p>Placement activity overview and statistics.</p></div>
+        <div><h2>Reports &amp; Analytics</h2><p>Placement activity overview and statistics.</p></div>
       </div>
       <div class="card mb-4">
         <div class="card-body py-3">
@@ -79,6 +115,16 @@ const AdminReports = {
                 <option value="">Full Year</option>
                 <option v-for="(m,i) in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']" :key="i+1" :value="i+1">{{ m }}</option>
               </select>
+            </div>
+            <div class="col-md-4 ms-auto d-flex gap-2 justify-content-end">
+              <button class="btn btn-outline-light btn-sm" @click="load" :disabled="loading">
+                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+              </button>
+              <button class="btn btn-danger btn-sm" @click="downloadPDF" :disabled="pdfLoading || loading">
+                <span v-if="pdfLoading" class="spinner-border spinner-border-sm me-1"></span>
+                <i v-else class="bi bi-file-earmark-pdf me-1"></i>
+                {{ pdfLoading ? 'Generating PDF...' : 'Download PDF Report' }}
+              </button>
             </div>
           </div>
         </div>

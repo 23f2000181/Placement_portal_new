@@ -77,9 +77,16 @@ const LoginView = {
 
     const onSubmit = async () => {
       error.value = '';
+      // Frontend validation
+      if (!form.email.trim()) { error.value = 'Email address is required.'; return; }
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRe.test(form.email.trim())) { error.value = 'Please enter a valid email address.'; return; }
+      if (!form.password) { error.value = 'Password is required.'; return; }
+      if (form.password.length < 6) { error.value = 'Password must be at least 6 characters.'; return; }
+
       loading.value = true;
       try {
-        const res = await Auth.login(form.email, form.password);
+        const res = await Auth.login(form.email.trim(), form.password);
         store.login(res.data.access_token, res.data.user, res.data.profile);
         const role = res.data.user.role;
         if (role === 'admin')        router.push('/admin');
@@ -130,7 +137,7 @@ const LoginView = {
             <i class="bi bi-exclamation-circle me-2"></i>{{ error }}
           </div>
 
-          <form @submit.prevent="onSubmit" novalidate>
+          <form @submit.prevent="onSubmit">
             <div class="mb-3">
               <label class="form-label">Email Address</label>
               <div class="input-group">

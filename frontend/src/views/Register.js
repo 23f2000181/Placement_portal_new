@@ -26,24 +26,49 @@ const RegisterView = {
     // Computed proxy so v-model always points to the active role's form
     const currentForm = Vue.computed(() => role.value === 'student' ? studentForm : companyForm);
 
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    const validateForm = () => {
+      const form = currentForm.value;
+      if (!form.email.trim())              return 'Email address is required.';
+      if (!emailRe.test(form.email.trim())) return 'Please enter a valid email address.';
+      if (!form.password)                  return 'Password is required.';
+      if (form.password.length < 6)        return 'Password must be at least 6 characters.';
+      if (form.password !== form.confirmPassword) return 'Passwords do not match.';
+
+      if (role.value === 'student') {
+        if (!studentForm.full_name.trim())  return 'Full name is required.';
+        if (!studentForm.usn.trim())        return 'USN / Roll Number is required.';
+        if (!/^[A-Za-z0-9]+$/.test(studentForm.usn.trim())) return 'USN should contain only letters and numbers.';
+        if (!studentForm.branch)            return 'Please select your branch.';
+        const cgpa = parseFloat(studentForm.cgpa);
+        if (isNaN(cgpa) || cgpa < 0 || cgpa > 10) return 'CGPA must be a number between 0.0 and 10.0.';
+        if (studentForm.phone && !/^\+?[\d\s\-]{7,15}$/.test(studentForm.phone))
+          return 'Please enter a valid phone number.';
+      } else {
+        if (!companyForm.company_name.trim()) return 'Company name is required.';
+        if (companyForm.website && !/^https?:\/\//i.test(companyForm.website))
+          return 'Website must start with http:// or https://';
+      }
+      return null;
+    };
+
     const onSubmit = async () => {
       error.value = '';
-      const form = currentForm.value;
-
-      if (form.password !== form.confirmPassword) {
-        error.value = 'Passwords do not match'; return;
-      }
-      if (form.password.length < 6) {
-        error.value = 'Password must be at least 6 characters'; return;
-      }
+      const validationError = validateForm();
+      if (validationError) { error.value = validationError; return; }
 
       loading.value = true;
       try {
-        const payload = { ...form, role: role.value };
+        const payload = { ...currentForm.value, role: role.value };
         delete payload.confirmPassword;
         if (role.value === 'student') {
-          payload.cgpa = parseFloat(form.cgpa);
-          payload.year = parseInt(form.year);
+          payload.cgpa = parseFloat(studentForm.cgpa);
+          payload.year = parseInt(studentForm.year);
+          payload.email = studentForm.email.trim().toLowerCase();
+          payload.usn = studentForm.usn.trim().toUpperCase();
+        } else {
+          payload.email = companyForm.email.trim().toLowerCase();
         }
         const res = await Auth.register(payload);
         store.login(res.data.access_token, res.data.user, res.data.profile || null);
@@ -81,22 +106,24 @@ const RegisterView = {
           </div>
         </div>
 
-        <div v-if="error" class="alert alert-danger py-2">{{ error }}</div>
+        <div v-if="error" class="alert alert-danger py-2">
+          <i class="bi bi-exclamation-circle me-2"></i>{{ error }}
+        </div>
 
-        <form @submit.prevent="onSubmit" novalidate>
+        <form @submit.prevent="onSubmit">
           <!-- Common fields -->
           <div class="row g-3 mb-3">
             <div class="col-12">
-              <label class="form-label">Email</label>
+              <label class="form-label">Email <span class="text-danger">*</span></label>
               <input v-model="currentForm.email" type="email" class="form-control" placeholder="Email address" required>
             </div>
             <div class="col-sm-6">
-              <label class="form-label">Password</label>
-              <input v-model="currentForm.password" type="password" class="form-control" placeholder="Min. 6 chars" required>
+              <label class="form-label">Password <span class="text-danger">*</span></label>
+              <input v-model="currentForm.password" type="password" class="form-control" placeholder="Min. 6 chars" required minlength="6">
             </div>
             <div class="col-sm-6">
-              <label class="form-label">Confirm Password</label>
-              <input v-model="currentForm.confirmPassword" type="password" class="form-control" placeholder="Repeat password" required>
+              <label class="form-label">Confirm Password <span class="text-danger">*</span></label>
+              <input v-model="currentForm.confirmPassword" type="password" class="form-control" placeholder="Repeat password" required minlength="6">
             </div>
           </div>
 
@@ -104,26 +131,26 @@ const RegisterView = {
           <template v-if="role==='student'">
             <div class="row g-3 mb-3">
               <div class="col-sm-6">
-                <label class="form-label">Full Name</label>
+                <label class="form-label">Full Name <span class="text-danger">*</span></label>
                 <input v-model="studentForm.full_name" class="form-control" placeholder="Your full name" required>
               </div>
               <div class="col-sm-6">
-                <label class="form-label">USN / Roll Number</label>
-                <input v-model="studentForm.usn" class="form-control" placeholder="1SI21CS001" required>
+                <label class="form-label">USN / Roll Number <span class="text-danger">*</span></label>
+                <input v-model="studentForm.usn" class="form-control" placeholder="1SI21CS001" required pattern="[A-Za-z0-9]+">
               </div>
               <div class="col-sm-6">
-                <label class="form-label">Branch</label>
+                <label class="form-label">Branch <span class="text-danger">*</span></label>
                 <select v-model="studentForm.branch" class="form-select" required>
                   <option value="">Select branch</option>
                   <option v-for="b in branches" :key="b">{{ b }}</option>
                 </select>
               </div>
               <div class="col-sm-3">
-                <label class="form-label">CGPA</label>
+                <label class="form-label">CGPA <span class="text-danger">*</span></label>
                 <input v-model="studentForm.cgpa" type="number" step="0.01" min="0" max="10" class="form-control" placeholder="8.5" required>
               </div>
               <div class="col-sm-3">
-                <label class="form-label">Year</label>
+                <label class="form-label">Year <span class="text-danger">*</span></label>
                 <select v-model="studentForm.year" class="form-select" required>
                   <option :value="1">1st</option>
                   <option :value="2">2nd</option>
@@ -132,15 +159,15 @@ const RegisterView = {
                 </select>
               </div>
               <div class="col-sm-6">
-                <label class="form-label">Phone (optional)</label>
+                <label class="form-label">Phone <span class="text-muted-custom small">(optional)</span></label>
                 <input v-model="studentForm.phone" class="form-control" placeholder="+91 9900000000">
               </div>
               <div class="col-sm-6">
-                <label class="form-label">LinkedIn (optional)</label>
+                <label class="form-label">LinkedIn <span class="text-muted-custom small">(optional)</span></label>
                 <input v-model="studentForm.linkedin" class="form-control" placeholder="linkedin.com/in/...">
               </div>
               <div class="col-12">
-                <label class="form-label">Skills (comma-separated, optional)</label>
+                <label class="form-label">Skills <span class="text-muted-custom small">(comma-separated, optional)</span></label>
                 <input v-model="studentForm.skills" class="form-control" placeholder="Python, Java, React...">
               </div>
             </div>
@@ -150,7 +177,7 @@ const RegisterView = {
           <template v-if="role==='company'">
             <div class="row g-3 mb-3">
               <div class="col-12">
-                <label class="form-label">Company Name</label>
+                <label class="form-label">Company Name <span class="text-danger">*</span></label>
                 <input v-model="companyForm.company_name" class="form-control" placeholder="Acme Corp Ltd." required>
               </div>
               <div class="col-sm-6">
@@ -174,7 +201,7 @@ const RegisterView = {
               </div>
               <div class="col-12">
                 <label class="form-label">Website</label>
-                <input v-model="companyForm.website" class="form-control" placeholder="https://company.com">
+                <input v-model="companyForm.website" type="url" class="form-control" placeholder="https://company.com">
               </div>
               <div class="col-12">
                 <label class="form-label">About Company</label>

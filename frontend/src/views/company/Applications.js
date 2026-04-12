@@ -1,21 +1,23 @@
 /* =====================================================================
    company/Applications.js — View & manage applicants for a drive
+   + Offer Letter PDF generation for selected candidates
    ===================================================================== */
 const CompanyApplications = {
   name: 'CompanyApplications',
   setup() {
-    const router = VueRouter.useRouter();
-    const route  = VueRouter.useRoute();
+    const router  = VueRouter.useRouter();
+    const route   = VueRouter.useRoute();
     const driveId = route.params.id;
 
-    const drive = Vue.ref(null);
-    const apps  = Vue.ref([]);
-    const loading = Vue.ref(true);
+    const drive    = Vue.ref(null);
+    const apps     = Vue.ref([]);
+    const loading  = Vue.ref(true);
     const statusFilter = Vue.ref('');
     const selected = Vue.ref(null);
     const newStatus = Vue.ref('');
     const interviewDate = Vue.ref('');
     const notes = Vue.ref('');
+    const offerLoadingId = Vue.ref(null);   // tracks which app is generating
     let modal = null;
 
     const load = async () => {
@@ -51,26 +53,55 @@ const CompanyApplications = {
       } catch (e) { showToast(e.response?.data?.error || 'Error','danger'); }
     };
 
-    return { drive, apps, loading, statusFilter, selected, newStatus, interviewDate, notes,
-             openModal, updateStatus, load, formatDate, formatDateTime,
-             exporting: Vue.ref(false),
-             exportDrive: async function() {
-               this.exporting = true;
-               const driveId = route.params.id;
-               try {
-                 const res = await Company.triggerExport(driveId);
-                 if (res.data.task_id) {
-                   showToast('Export started! It will download when ready.', 'info');
-                 }
-               } catch {
-                 // Sync fallback — open route directly
-                 const a = document.createElement('a');
-                 a.href = `/api/company/drives/${driveId}/export`;
-                 a.click();
-                 showToast('Export triggered!', 'success');
-               } finally { this.exporting = false; }
-             }
-           };
+    const generateOfferLetter = async (appId, studentName) => {
+      offerLoadingId.value = appId;
+      try {
+        const token = localStorage.getItem('ppa_token');
+        const res = await fetch(`/api/company/offer-letter/${appId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          showToast(j.error || 'Could not generate offer letter', 'danger');
+          return;
+        }
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        const safe = (studentName || 'candidate').replace(/\s+/g, '_');
+        a.href     = url;
+        a.download = `offer_letter_${safe}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast(`Offer letter for ${studentName} downloaded!`, 'success');
+      } catch (e) {
+        showToast('Failed to generate offer letter', 'danger');
+      } finally {
+        offerLoadingId.value = null;
+      }
+    };
+
+    return {
+      drive, apps, loading, statusFilter, selected, newStatus, interviewDate, notes,
+      offerLoadingId, openModal, updateStatus, load, formatDate, formatDateTime,
+      generateOfferLetter,
+      exporting: Vue.ref(false),
+      exportDrive: async function() {
+        this.exporting = true;
+        const dId = route.params.id;
+        try {
+          const res = await Company.triggerExport(dId);
+          if (res.data.task_id) {
+            showToast('Export started! It will download when ready.', 'info');
+          }
+        } catch {
+          const a = document.createElement('a');
+          a.href = `/api/company/drives/${dId}/export`;
+          a.click();
+          showToast('Export triggered!', 'success');
+        } finally { this.exporting = false; }
+      }
+    };
   },
   template: `
     <div>
@@ -82,6 +113,7 @@ const CompanyApplications = {
         </div>
       </div>
 
+      <!-- Status filter pills -->
       <div class="card mb-4"><div class="card-body py-3">
         <div class="d-flex gap-2 flex-wrap">
           <button v-for="s in ['', 'applied', 'shortlisted', 'selected', 'rejected']" :key="s"
@@ -106,7 +138,10 @@ const CompanyApplications = {
           <div v-else-if="!apps.length" class="empty-state"><i class="bi bi-people"></i><p>No applicants yet</p></div>
           <div v-else class="table-responsive">
             <table class="table table-hover mb-0">
-              <thead><tr><th>Student</th><th>USN</th><th>Branch</th><th>CGPA</th><th>Applied</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr>
+                <th>Student</th><th>USN</th><th>Branch</th><th>CGPA</th>
+                <th>Applied</th><th>Status</th><th>Actions</th>
+              </tr></thead>
               <tbody>
                 <tr v-for="a in apps" :key="a.id">
                   <td>
@@ -119,11 +154,26 @@ const CompanyApplications = {
                   <td><span class="small text-muted-custom">{{ formatDate(a.applied_at) }}</span></td>
                   <td><span :class="['badge-status','badge-'+a.status]">{{ a.status }}</span></td>
                   <td>
-                    <div class="d-flex gap-1">
-                      <button class="btn btn-sm btn-outline-light" @click="openModal(a)"><i class="bi bi-pencil-square"></i> Update</button>
-                      <a v-if="a.student?.has_resume" :href="'/api/student/profile/resume'" class="btn btn-sm btn-outline-light" target="_blank">
+                    <div class="d-flex gap-1 flex-wrap">
+                      <button class="btn btn-sm btn-outline-light" @click="openModal(a)">
+                        <i class="bi bi-pencil-square"></i> Update
+                      </button>
+                      <a v-if="a.student?.has_resume" href="/api/student/profile/resume"
+                         class="btn btn-sm btn-outline-light" target="_blank" title="View Resume">
                         <i class="bi bi-file-earmark-pdf"></i>
                       </a>
+                      <!-- Offer Letter — only for selected candidates -->
+                      <button
+                        v-if="a.status === 'selected'"
+                        class="btn btn-sm btn-outline-success"
+                        :disabled="offerLoadingId === a.id"
+                        @click="generateOfferLetter(a.id, a.student?.full_name)"
+                        title="Download Offer Letter PDF"
+                      >
+                        <span v-if="offerLoadingId === a.id" class="spinner-border spinner-border-sm"></span>
+                        <i v-else class="bi bi-file-earmark-check"></i>
+                        <span class="ms-1 d-none d-lg-inline">{{ offerLoadingId === a.id ? '...' : 'Offer' }}</span>
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -158,6 +208,10 @@ const CompanyApplications = {
               <div class="mb-3">
                 <label class="form-label">Notes (optional)</label>
                 <textarea v-model="notes" class="form-control" rows="2"></textarea>
+              </div>
+              <div v-if="newStatus === 'selected'" class="alert alert-success py-2" style="font-size:0.82rem;">
+                <i class="bi bi-info-circle me-1"></i>
+                After saving, an <strong>Offer Letter PDF</strong> button will appear next to this applicant.
               </div>
             </div>
             <div class="modal-footer">

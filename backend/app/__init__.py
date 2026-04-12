@@ -33,11 +33,13 @@ def create_app(config_name='default'):
     from .routes.admin import admin_bp
     from .routes.company import company_bp
     from .routes.student import student_bp
+    from .routes.reports_pdf import reports_pdf_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(company_bp, url_prefix='/api/company')
     app.register_blueprint(student_bp, url_prefix='/api/student')
+    app.register_blueprint(reports_pdf_bp, url_prefix='/api')
 
     # Serve Vue SPA for all non-API routes
     @app.route('/', defaults={'path': ''})
